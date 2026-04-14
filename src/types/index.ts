@@ -29,4 +29,5 @@ export type AppState = {
   isStreaming: boolean;
   error: string | null;
   status: 'idle' | 'thinking' | 'error' | 'success';
+  sessionTokens: number;
 };

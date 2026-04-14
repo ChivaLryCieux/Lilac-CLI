@@ -11,6 +11,8 @@ import { createChatStream } from '../core/api';
 import { hasApiKey } from '../core/config';
 import type { AppState, Message } from '../types';
 
+import { estimateTokens } from '../utils/tokens';
+
 export const App: React.FC = () => {
   const { exit } = useApp();
   const [showWelcome, setShowWelcome] = useState(true);
@@ -20,23 +22,11 @@ export const App: React.FC = () => {
     isStreaming: false,
     error: null,
     status: 'idle',
+    sessionTokens: 0,
   });
   const [input, setInput] = useState('');
 
-  useEffect(() => {
-    loadDefaultSkill().then(skill => {
-      setState(s => ({ ...s, activeSkill: skill }));
-    });
-    
-    // 3秒后自动隐藏欢迎界面，或者用户输入后隐藏
-    const timer = setTimeout(() => setShowWelcome(false), 4000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useInput((input, key) => {
-    if (key.escape || (key.ctrl && input === 'c')) exit();
-    if (showWelcome) setShowWelcome(false);
-  });
+  // ... (中间代码省略，仅展示 handleSubmit 中的修改点)
 
   const handleSubmit = async (query: string) => {
     if (showWelcome) setShowWelcome(false);
@@ -47,6 +37,9 @@ export const App: React.FC = () => {
       setInput('');
       return;
     }
+
+    // 计算输入 Token
+    const inputTokens = estimateTokens(query);
 
     const userMsg: Message = {
       id: Math.random().toString(36).substring(7),
@@ -67,16 +60,24 @@ export const App: React.FC = () => {
       messages: [...s.messages, userMsg, assistantMsg],
       isStreaming: true,
       status: 'thinking',
-      error: null
+      error: null,
+      sessionTokens: s.sessionTokens + inputTokens
     }));
     setInput('');
 
     try {
       await createChatStream([...state.messages, userMsg], state.activeSkill, (chunk) => {
+        // 实时计算每个 chunk 的 Token 并累加
+        const chunkTokens = estimateTokens(chunk);
         setState(s => {
           const last = s.messages[s.messages.length - 1];
           const updated = { ...last, content: last.content + chunk };
-          return { ...s, messages: [...s.messages.slice(0, -1), updated], status: 'idle' };
+          return { 
+            ...s, 
+            messages: [...s.messages.slice(0, -1), updated], 
+            status: 'idle',
+            sessionTokens: s.sessionTokens + chunkTokens
+          };
         });
       });
     } catch (err: any) {
@@ -87,28 +88,7 @@ export const App: React.FC = () => {
   };
 
   if (showWelcome) {
-    return (
-      <Box flexDirection="column" alignItems="center" justifyContent="center" padding={2}>
-        <Gradient colors={['#818cf8', '#c084fc', '#e879f9']}>
-          <BigText text="LILAC" font="block" />
-        </Gradient>
-        <Box marginTop={-1} marginBottom={1}>
-          <Text color="gray">Author: </Text>
-          <Text bold color="cyan">Tempsyche</Text>
-        </Box>
-        <Box borderStyle="round" borderColor="gray" paddingX={2}>
-          <Text italic color="magenta">Designing a Skill-Driven CLI Agent</Text>
-        </Box>
-        <Box marginTop={2}>
-          <Text color="gray">Press any key to start...</Text>
-        </Box>
-        {!hasApiKey && (
-          <Box marginTop={1}>
-            <Text color="yellow">⚠️ 提示: 尚未配置 API Key, 仅支持 UI 预览模式。</Text>
-          </Box>
-        )}
-      </Box>
-    );
+    // ...
   }
 
   return (
@@ -117,7 +97,9 @@ export const App: React.FC = () => {
         skillName={state.activeSkill?.name} 
         model={state.activeSkill?.model} 
         status={hasApiKey ? state.status : 'Config Required'} 
+        tokens={state.sessionTokens}
       />
+      {/* ... */}
 
       <Box flexDirection="column" flexGrow={1} marginBottom={1}>
         {state.messages.length === 0 && (
