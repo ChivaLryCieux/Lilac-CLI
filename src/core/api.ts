@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { config } from './config';
 import type { Message, Skill } from '../types';
+import { runHarnessOrchestrator } from '../harness/orchestrator';
 
 let openaiInstance: OpenAI | null = null;
 
@@ -23,17 +24,36 @@ export async function createChatStream(
   onChunk: (text: string) => void
 ) {
   const client = getOpenAIClient();
+  const model = skill?.model || config.LILAC_DEFAULT_MODEL;
+  const temperature = skill?.temperature || 0.7;
+
+  if (config.LILAC_ENABLE_HARNESS) {
+    try {
+      await runHarnessOrchestrator(
+        client,
+        {
+          messages,
+          skill,
+          model,
+          temperature,
+          maxSteps: config.LILAC_MAX_REASONING_STEPS,
+        },
+        onChunk
+      );
+      return;
+    } catch (error) {
+      console.warn('Harness failed. Falling back to direct chat mode.', error);
+    }
+  }
+
   const systemPrompt = skill?.systemPrompt || 'You are a helpful assistant.';
-  const apiMessages: any[] = [
-    { role: 'system', content: systemPrompt },
-    ...messages.map(m => ({ role: m.role, content: m.content })),
-  ];
+  const apiMessages: any[] = [{ role: 'system', content: systemPrompt }, ...messages.map(m => ({ role: m.role, content: m.content }))];
 
   try {
     const stream = await client.chat.completions.create({
-      model: skill?.model || config.LILAC_DEFAULT_MODEL,
+      model,
       messages: apiMessages,
-      temperature: skill?.temperature || 0.7,
+      temperature,
       stream: true,
     });
 

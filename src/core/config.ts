@@ -9,6 +9,14 @@ const configSchema = z.object({
   LILAC_BASE_URL: z.string().url().default('https://api.openai.com/v1'),
   LILAC_DEFAULT_MODEL: z.string().default('gpt-4o'),
   LILAC_SKILLS_DIR: z.string().default(path.join(process.cwd(), 'skills')),
+  LILAC_ENABLE_HARNESS: z
+    .string()
+    .default('true')
+    .transform(v => v.toLowerCase() !== 'false'),
+  LILAC_ORCHESTRATOR: z
+    .enum(['auto', 'openai-agents', 'langgraph', 'builtin'])
+    .default('auto'),
+  LILAC_MAX_REASONING_STEPS: z.coerce.number().int().min(1).max(12).default(4),
 });
 
 const parsed = configSchema.safeParse(process.env);
