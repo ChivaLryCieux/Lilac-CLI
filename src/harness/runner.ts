@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
-import { harnessTools } from './tools';
 import type { HarnessRunOptions } from './types';
+import { executeToolCalls, getModelTools, toInitialMessages } from './chatRuntime';
 
 const defaultMaxSteps = 4;
 
@@ -20,31 +20,15 @@ export async function runHarness(
   onChunk: (text: string) => void
 ) {
   const maxSteps = options.maxSteps ?? defaultMaxSteps;
-  const modelMessages: any[] = [
-    {
-      role: 'system',
-      content: [options.skill?.systemPrompt, harnessInstruction].filter(Boolean).join('\n\n'),
-    },
-    ...options.messages.map(message => ({
-      role: message.role,
-      content: message.content,
-    })),
-  ];
-
-  const tools = harnessTools.map(tool => ({
-    type: 'function' as const,
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
-    },
-  }));
+  const modelMessages = toInitialMessages(options);
+  modelMessages[0]!.content = [modelMessages[0]!.content, harnessInstruction].filter(Boolean).join('\n\n');
+  const tools = getModelTools();
 
   for (let step = 0; step < maxSteps; step++) {
     const completion = await client.chat.completions.create({
       model: options.model,
       temperature: options.temperature,
-      messages: modelMessages,
+      messages: modelMessages as any,
       tools,
       tool_choice: 'auto',
     });
@@ -56,57 +40,21 @@ export async function runHarness(
       return;
     }
 
-    modelMessages.push(assistantMessage);
+    modelMessages.push({
+      ...assistantMessage,
+      content: assistantMessage.content ?? '',
+    } as any);
 
-    const toolCalls = assistantMessage.tool_calls ?? [];
-    if (!toolCalls.length) {
+    if (!(assistantMessage.tool_calls?.length)) {
       onChunk(assistantMessage.content ?? '');
       return;
     }
 
-    for (const toolCall of toolCalls) {
-      const toolName = toolCall.function?.name;
-      const tool = harnessTools.find(item => item.name === toolName);
-
-      if (!tool) {
-        modelMessages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: `Tool not found: ${toolName}`,
-        });
-        continue;
-      }
-
-      let args: Record<string, unknown> = {};
-      const rawArgs = toolCall.function?.arguments ?? '{}';
-
-      try {
-        args = JSON.parse(rawArgs);
-      } catch {
-        modelMessages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: `Invalid JSON arguments for tool "${toolName}".`,
-        });
-        continue;
-      }
-
-      try {
-        const result = await tool.execute(args);
-        modelMessages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: result,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown tool error';
-        modelMessages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: `Tool execution failed: ${message}`,
-        });
-      }
-    }
+    const toolMessages = await executeToolCalls({
+      ...assistantMessage,
+      content: assistantMessage.content ?? '',
+    } as any);
+    modelMessages.push(...toolMessages);
   }
 
   onChunk('Harness 达到最大推理步数，请尝试拆分问题或提供更多上下文。');

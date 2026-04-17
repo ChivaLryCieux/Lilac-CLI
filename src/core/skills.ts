@@ -4,26 +4,30 @@ import matter from 'gray-matter';
 import { config } from './config';
 import type { Skill } from '../types';
 
+let cachedSkills: Skill[] | null = null;
+
+async function parseSkillFile(file: string): Promise<Skill> {
+  const fullPath = path.join(config.LILAC_SKILLS_DIR, file);
+  const markdown = await fs.readFile(fullPath, 'utf-8');
+  const { data, content } = matter(markdown);
+
+  return {
+    name: data.name || path.basename(file, '.md'),
+    description: data.description || '',
+    model: data.model,
+    temperature: data.temperature,
+    systemPrompt: content.trim(),
+  };
+}
+
 export async function loadSkills(): Promise<Skill[]> {
+  if (cachedSkills) return cachedSkills;
+
   const dir = config.LILAC_SKILLS_DIR;
   const files = await fs.readdir(dir);
-  const skills: Skill[] = [];
-
-  for (const file of files) {
-    if (file.endsWith('.md')) {
-      const fullPath = path.join(dir, file);
-      const content = await fs.readFile(fullPath, 'utf-8');
-      const { data, content: body } = matter(content);
-
-      skills.push({
-        name: data.name || path.basename(file, '.md'),
-        description: data.description || '',
-        model: data.model,
-        temperature: data.temperature,
-        systemPrompt: body.trim(),
-      });
-    }
-  }
+  const markdownFiles = files.filter(file => file.endsWith('.md'));
+  const skills = await Promise.all(markdownFiles.map(parseSkillFile));
+  cachedSkills = skills;
 
   return skills;
 }

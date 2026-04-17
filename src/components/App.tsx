@@ -25,6 +25,13 @@ export const App: React.FC = () => {
   });
   const [input, setInput] = useState('');
 
+  const createMessage = (role: Message['role'], content: string): Message => ({
+    id: crypto.randomUUID(),
+    role,
+    content,
+    timestamp: Date.now(),
+  });
+
   useEffect(() => {
     loadDefaultSkill().then(skill => {
       setState(s => ({ ...s, activeSkill: skill }));
@@ -53,19 +60,10 @@ export const App: React.FC = () => {
     // 计算输入 Token
     const inputTokens = estimateTokens(query);
 
-    const userMsg: Message = {
-      id: Math.random().toString(36).substring(7),
-      role: 'user',
-      content: query,
-      timestamp: Date.now(),
-    };
+    const userMsg = createMessage('user', query);
+    const assistantMsg = createMessage('assistant', '');
 
-    const assistantMsg: Message = {
-      id: Math.random().toString(36).substring(7),
-      role: 'assistant',
-      content: '',
-      timestamp: Date.now(),
-    };
+    const nextMessages = [...state.messages, userMsg];
 
     setState(s => ({
       ...s,
@@ -78,10 +76,13 @@ export const App: React.FC = () => {
     setInput('');
 
     try {
-      await createChatStream([...state.messages, userMsg], state.activeSkill, (chunk) => {
+      await createChatStream(nextMessages, state.activeSkill, (chunk) => {
         const chunkTokens = estimateTokens(chunk);
         setState(s => {
           const last = s.messages[s.messages.length - 1];
+          if (!last || last.role !== 'assistant') {
+            return s;
+          }
           const updated = { ...last, content: last.content + chunk };
           return { 
             ...s, 
