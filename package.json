@@ -2,9 +2,13 @@
   "name": "lilac",
   "module": "src/index.tsx",
   "type": "module",
+  "bin": {
+    "lilac": "src/index.tsx"
+  },
   "scripts": {
     "dev": "bun --watch src/index.tsx",
-    "start": "bun src/index.tsx"
+    "start": "bun src/index.tsx",
+    "typecheck": "bunx tsc --noEmit"
   },
   "private": true,
   "devDependencies": {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
 
-dotenvConfig();
+dotenvConfig({ quiet: true });
 
 const configSchema = z.object({
   LILAC_API_KEY: z.string().optional(), // 改为可选，允许先进入 TUI
