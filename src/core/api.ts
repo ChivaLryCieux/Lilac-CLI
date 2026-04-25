@@ -21,10 +21,11 @@ function getOpenAIClient() {
 export async function createChatStream(
   messages: Message[],
   skill: Skill | null,
+  modelOverride: string | undefined,
   onChunk: (text: string) => void
 ) {
   const client = getOpenAIClient();
-  const model = skill?.model || config.LILAC_DEFAULT_MODEL;
+  const model = modelOverride || skill?.model || config.LILAC_DEFAULT_MODEL;
   const temperature = skill?.temperature || 0.7;
 
   if (config.LILAC_ENABLE_HARNESS) {

@@ -20,11 +20,11 @@ async function parseSkillFile(file: string): Promise<Skill> {
   };
 }
 
-export async function loadSkills(): Promise<Skill[]> {
-  if (cachedSkills) return cachedSkills;
+export async function loadSkills(options: { refresh?: boolean } = {}): Promise<Skill[]> {
+  if (cachedSkills && !options.refresh) return cachedSkills;
 
   const dir = config.LILAC_SKILLS_DIR;
-  const files = await fs.readdir(dir);
+  const files = await fs.readdir(dir).catch(() => []);
   const markdownFiles = files.filter(file => file.endsWith('.md'));
   const skills = await Promise.all(markdownFiles.map(parseSkillFile));
   cachedSkills = skills;

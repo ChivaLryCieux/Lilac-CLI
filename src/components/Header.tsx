@@ -7,9 +7,10 @@ interface HeaderProps {
   model?: string;
   status: string;
   tokens: number;
+  permissionMode: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ skillName, model, status, tokens }) => (
+export const Header: React.FC<HeaderProps> = ({ skillName, model, status, tokens, permissionMode }) => (
   <Box borderStyle="round" borderColor="magenta" paddingX={1} marginBottom={1} flexDirection="column">
     <Box justifyContent="space-between">
       <Text bold color="magenta">Lilac Agent v1.0</Text>
@@ -29,6 +30,13 @@ export const Header: React.FC<HeaderProps> = ({ skillName, model, status, tokens
         </Box>
       </Box>
       <Text color="gray">{model || 'default'}</Text>
+    </Box>
+    <Box>
+      <Text color="gray">Mode: </Text>
+      <Text color={permissionMode === 'auto' ? 'green' : permissionMode === 'deny' ? 'red' : 'yellow'}>
+        {permissionMode}
+      </Text>
+      <Text color="gray"> · Commands: /help</Text>
     </Box>
   </Box>
 );

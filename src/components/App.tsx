@@ -6,9 +6,12 @@ import BigText from 'ink-big-text';
 import Gradient from 'ink-gradient';
 import { Header } from './Header';
 import { MessageItem } from './MessageItem';
-import { loadDefaultSkill } from '../core/skills';
+import { loadDefaultSkill, loadSkills } from '../core/skills';
 import { createChatStream } from '../core/api';
 import { hasApiKey } from '../core/config';
+import { defaultSettings, loadSettings } from '../core/settings';
+import { loadLatestSession, saveSession } from '../core/session';
+import { executeSlashCommand, isSlashCommand } from '../commands';
 import { estimateTokens } from '../utils/tokens';
 import type { AppState, Message } from '../types';
 
@@ -22,6 +25,8 @@ export const App: React.FC = () => {
     error: null,
     status: 'idle',
     sessionTokens: 0,
+    settings: defaultSettings,
+    sessionId: crypto.randomUUID(),
   });
   const [input, setInput] = useState('');
 
@@ -33,14 +38,37 @@ export const App: React.FC = () => {
   });
 
   useEffect(() => {
-    loadDefaultSkill().then(skill => {
-      setState(s => ({ ...s, activeSkill: skill }));
+    Promise.all([loadSettings(), loadLatestSession(), loadSkills()]).then(async ([settings, session, skills]) => {
+      const activeSkill =
+        (settings.activeSkillName && skills.find(skill => skill.name === settings.activeSkillName)) ||
+        (await loadDefaultSkill());
+
+      setState(s => ({
+        ...s,
+        activeSkill,
+        settings,
+        messages: session.messages ?? [],
+        sessionId: session.id,
+        sessionTokens: session.sessionTokens ?? 0,
+      }));
     });
     
     // 4秒后自动隐藏欢迎界面
     const timer = setTimeout(() => setShowWelcome(false), 4000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    saveSession({
+      id: state.sessionId,
+      messages: state.messages,
+      activeSkillId: state.activeSkill?.name,
+      createdAt: Date.now(),
+      sessionTokens: state.sessionTokens,
+    }).catch(error => {
+      setState(s => ({ ...s, error: error instanceof Error ? error.message : String(error), status: 'error' }));
+    });
+  }, [state.activeSkill?.name, state.messages, state.sessionId, state.sessionTokens]);
 
   useInput((input, key) => {
     if (key.escape || (key.ctrl && input === 'c')) exit();
@@ -50,6 +78,36 @@ export const App: React.FC = () => {
   const handleSubmit = async (query: string) => {
     if (showWelcome) setShowWelcome(false);
     if (!query.trim() || state.isStreaming) return;
+
+    if (isSlashCommand(query)) {
+      setInput('');
+      setState(s => ({ ...s, status: 'command', error: null }));
+      try {
+        const result = await executeSlashCommand(query, {
+          messages: state.messages,
+          activeSkill: state.activeSkill,
+          settings: state.settings,
+          sessionTokens: state.sessionTokens,
+        });
+
+        if (result.exit) {
+          exit();
+          return;
+        }
+
+        setState(s => ({
+          ...s,
+          messages: [...(result.clearMessages ? [] : s.messages), ...(result.messages ?? [])],
+          activeSkill: result.nextSkill === undefined ? s.activeSkill : result.nextSkill,
+          settings: result.nextSettings ?? s.settings,
+          sessionTokens: result.nextSessionTokens ?? s.sessionTokens,
+          status: 'idle',
+        }));
+      } catch (err: any) {
+        setState(s => ({ ...s, error: err.message, status: 'error' }));
+      }
+      return;
+    }
 
     if (!hasApiKey) {
       setState(s => ({ ...s, error: 'API Key 未配置！请在 .env 文件中填入 LILAC_API_KEY 并在重启后尝试。', status: 'error' }));
@@ -76,7 +134,7 @@ export const App: React.FC = () => {
     setInput('');
 
     try {
-      await createChatStream(nextMessages, state.activeSkill, (chunk) => {
+      await createChatStream(nextMessages, state.activeSkill, state.settings.defaultModel, (chunk) => {
         const chunkTokens = estimateTokens(chunk);
         setState(s => {
           const last = s.messages[s.messages.length - 1];
@@ -131,12 +189,14 @@ export const App: React.FC = () => {
         model={state.activeSkill?.model} 
         status={hasApiKey ? state.status : 'Config Required'} 
         tokens={state.sessionTokens}
+        permissionMode={state.settings.permissionMode}
       />
 
       <Box flexDirection="column" flexGrow={1} marginBottom={1}>
         {state.messages.length === 0 && (
-          <Box padding={2} justifyContent="center">
-            <Text color="gray">No messages yet. Start a conversation!</Text>
+          <Box padding={2} flexDirection="column">
+            <Text color="gray">No messages yet. Start a conversation or run /help.</Text>
+            <Text color="gray">Claude-Code-like commands are available: /status, /skills, /model, /permissions.</Text>
           </Box>
         )}
         {state.messages.map(msg => (
