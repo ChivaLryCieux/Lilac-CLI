@@ -3,6 +3,7 @@ import { config, hasApiKey } from '../core/config';
 import { loadSkills } from '../core/skills';
 import { saveSettings } from '../core/settings';
 import { createSystemMessage } from '../core/session';
+import { listWorkspaceFiles, searchWorkspace } from '../core/workspace';
 import type { LilacSettings, Message, Skill } from '../types';
 
 export type CommandContext = {
@@ -160,6 +161,46 @@ const commandDefinitions: CommandDefinition[] = [
     },
   },
   {
+    name: 'files',
+    summary: 'List workspace files',
+    usage: '/files [path]',
+    handler: async (args) => {
+      const target = args[0] ?? '.';
+      const files = await listWorkspaceFiles(target, 120);
+      return system(`Files under ${target}:\n\n${files.join('\n') || 'No files found.'}`);
+    },
+  },
+  {
+    name: 'search',
+    summary: 'Search workspace text',
+    usage: '/search <pattern>',
+    handler: async (args) => {
+      const pattern = args.join(' ').trim();
+      if (!pattern) {
+        return system('Usage: /search <pattern>');
+      }
+      const matches = await searchWorkspace(pattern, '.', 80);
+      return system(`Search results for "${pattern}":\n\n${matches.join('\n') || 'No matches found.'}`);
+    },
+  },
+  {
+    name: 'doctor',
+    summary: 'Run local health checks',
+    usage: '/doctor',
+    handler: async (_args, context) => {
+      const checks = [
+        ['Bun runtime', typeof Bun !== 'undefined' ? 'ok' : 'missing'],
+        ['API key', hasApiKey ? 'ok' : 'missing LILAC_API_KEY'],
+        ['Skills loaded', context.activeSkill ? `ok (${context.activeSkill.name})` : 'no active skill'],
+        ['Harness', config.LILAC_ENABLE_HARNESS ? `enabled (${config.LILAC_ORCHESTRATOR})` : 'disabled'],
+        ['Permission mode', context.settings.permissionMode],
+        ['Workspace', process.cwd()],
+      ];
+
+      return system(checks.map(([name, value]) => `${name}: ${value}`).join('\n'));
+    },
+  },
+  {
     name: 'compact',
     summary: 'Replace chat with a local summary',
     usage: '/compact',
@@ -211,4 +252,3 @@ export async function executeSlashCommand(input: string, context: CommandContext
 
   return command.handler(args, context);
 }
-

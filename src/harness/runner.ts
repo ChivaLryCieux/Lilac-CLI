@@ -12,6 +12,7 @@ Rules:
 2. If a tool returns enough context, provide a direct answer.
 3. Be explicit when a result comes from tool output.
 4. Keep final answer concise and practical.
+5. File writes and shell commands are guarded by Lilac permission mode; if blocked, tell the user which /permissions mode is required.
 `.trim();
 
 export async function runHarness(
