@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Text, useInput, useApp } from 'ink';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Box, Text, useInput, useApp, useWindowSize } from 'ink';
 import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
 import BigText from 'ink-big-text';
@@ -15,8 +15,55 @@ import { executeSlashCommand, isSlashCommand } from '../commands';
 import { estimateTokens } from '../utils/tokens';
 import type { AppState, Message } from '../types';
 
+function estimateWrappedLines(text: string, width: number): number {
+  const lines = text.split('\n');
+  return lines.reduce((total, line) => total + Math.max(1, Math.ceil(line.length / width)), 0);
+}
+
+function estimateMessageRows(message: Message, width: number): number {
+  return estimateWrappedLines(message.content || ' ', width) + 3;
+}
+
+function truncateMessageToRows(message: Message, width: number, rows: number): Message {
+  const availableContentRows = Math.max(1, rows - 4);
+  const maxChars = Math.max(width, availableContentRows * width);
+  if (message.content.length <= maxChars) {
+    return message;
+  }
+
+  return {
+    ...message,
+    content: `[Earlier output hidden]\n${message.content.slice(-maxChars)}`,
+  };
+}
+
+function getVisibleMessages(messages: Message[], columns: number, rows: number): Message[] {
+  const contentWidth = Math.max(24, columns - 8);
+  let remainingRows = Math.max(3, rows);
+  const visible: Message[] = [];
+
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]!;
+    const messageRows = estimateMessageRows(message, contentWidth);
+
+    if (messageRows <= remainingRows) {
+      visible.unshift(message);
+      remainingRows -= messageRows;
+      continue;
+    }
+
+    if (visible.length === 0) {
+      visible.unshift(truncateMessageToRows(message, contentWidth, remainingRows));
+    }
+    break;
+  }
+
+  return visible;
+}
+
 export const App: React.FC = () => {
   const { exit } = useApp();
+  const { columns, rows } = useWindowSize();
   const [showWelcome, setShowWelcome] = useState(true);
   const [state, setState] = useState<AppState>({
     messages: [],
@@ -29,6 +76,12 @@ export const App: React.FC = () => {
     sessionId: crypto.randomUUID(),
   });
   const [input, setInput] = useState('');
+  const terminalRows = Math.max(12, rows);
+  const messageRows = Math.max(3, terminalRows - (state.error ? 12 : 9));
+  const visibleMessages = useMemo(
+    () => getVisibleMessages(state.messages, columns, messageRows),
+    [columns, messageRows, state.messages]
+  );
 
   const createMessage = (role: Message['role'], content: string): Message => ({
     id: crypto.randomUUID(),
@@ -183,7 +236,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <Box flexDirection="column" padding={1} minHeight={10}>
+    <Box flexDirection="column" padding={1} height={terminalRows} minHeight={10} overflow="hidden">
       <Header 
         skillName={state.activeSkill?.name} 
         model={state.settings.defaultModel ?? config.LILAC_DEFAULT_MODEL ?? state.activeSkill?.model} 
@@ -192,14 +245,14 @@ export const App: React.FC = () => {
         permissionMode={state.settings.permissionMode}
       />
 
-      <Box flexDirection="column" flexGrow={1} marginBottom={1}>
+      <Box flexDirection="column" height={messageRows} overflow="hidden" marginBottom={1}>
         {state.messages.length === 0 && (
           <Box padding={2} flexDirection="column">
             <Text color="gray">No messages yet. Start a conversation or run /help.</Text>
             <Text color="gray">Claude-Code-like commands are available: /status, /skills, /model, /permissions.</Text>
           </Box>
         )}
-        {state.messages.map(msg => (
+        {visibleMessages.map(msg => (
           <MessageItem key={msg.id} message={msg} />
         ))}
       </Box>
