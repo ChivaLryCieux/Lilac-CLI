@@ -1,6 +1,19 @@
 import { harnessTools } from './tools';
 import type { HarnessRunOptions } from './types';
 
+export const defaultMaxSteps = 4;
+
+const harnessInstruction = `
+You are running inside Lilac Harness mode.
+
+Rules:
+1. You can call tools when useful, but keep calls minimal.
+2. If a tool returns enough context, provide a direct answer.
+3. Be explicit when a result comes from tool output.
+4. Keep final answer concise and practical.
+5. File writes and shell commands are guarded by Lilac permission mode; if blocked, tell the user which /permissions mode is required.
+`.trim();
+
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
@@ -28,11 +41,20 @@ export function getModelTools() {
   }));
 }
 
+export function resolveMaxSteps(options: HarnessRunOptions): number {
+  return options.maxSteps ?? defaultMaxSteps;
+}
+
+export function getSystemPrompt(options: HarnessRunOptions): string {
+  const basePrompt = options.skill?.systemPrompt?.trim() || 'You are a helpful assistant.';
+  return [basePrompt, harnessInstruction].filter(Boolean).join('\n\n');
+}
+
 export function toInitialMessages(options: HarnessRunOptions): ChatMessage[] {
   return [
     {
       role: 'system',
-      content: options.skill?.systemPrompt?.trim() || 'You are a helpful assistant.',
+      content: getSystemPrompt(options),
     },
     ...options.messages.map(message => ({
       role: message.role,

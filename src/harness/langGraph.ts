@@ -1,13 +1,7 @@
 import OpenAI from 'openai';
 import type { HarnessRunOptions } from './types';
-import { type ChatMessage, executeToolCalls, getModelTools, toInitialMessages } from './chatRuntime';
-
-type DynamicImportFn = <T = unknown>(moduleName: string) => Promise<T>;
-
-const dynamicImport: DynamicImportFn = async <T = unknown>(moduleName: string) => {
-  const importer = new Function('m', 'return import(m)') as (m: string) => Promise<T>;
-  return importer(moduleName);
-};
+import { type ChatMessage, executeToolCalls, getModelTools, resolveMaxSteps, toInitialMessages } from './chatRuntime';
+import { dynamicImport } from './dynamicImport';
 
 export async function runWithLangGraph(
   client: OpenAI,
@@ -29,7 +23,7 @@ export async function runWithLangGraph(
 
   const tools = getModelTools();
 
-  const maxSteps = options.maxSteps ?? 4;
+  const maxSteps = resolveMaxSteps(options);
   let turns = 0;
 
   const graph = new MessageGraphCtor();

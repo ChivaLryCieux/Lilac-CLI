@@ -6,6 +6,24 @@ import { runWithOpenAIAgents } from './openaiAgents';
 import { runWithLangGraph } from './langGraph';
 
 type OrchestratorKind = 'builtin' | 'openai-agents' | 'langgraph';
+type HarnessRunner = (
+  client: OpenAI,
+  options: HarnessRunOptions,
+  onChunk: (text: string) => void
+) => Promise<void>;
+
+const orchestrators: Record<OrchestratorKind, HarnessRunner> = {
+  'openai-agents': runWithOpenAIAgents,
+  langgraph: runWithLangGraph,
+  builtin: runBuiltinHarness,
+};
+
+const orchestratorOrders: Record<typeof config.LILAC_ORCHESTRATOR, OrchestratorKind[]> = {
+  'openai-agents': ['openai-agents', 'langgraph', 'builtin'],
+  langgraph: ['langgraph', 'openai-agents', 'builtin'],
+  builtin: ['builtin'],
+  auto: ['openai-agents', 'langgraph', 'builtin'],
+};
 
 async function tryRun(
   kind: OrchestratorKind,
@@ -13,31 +31,11 @@ async function tryRun(
   options: HarnessRunOptions,
   onChunk: (text: string) => void
 ) {
-  if (kind === 'openai-agents') {
-    await runWithOpenAIAgents(client, options, onChunk);
-    return;
-  }
-
-  if (kind === 'langgraph') {
-    await runWithLangGraph(client, options, onChunk);
-    return;
-  }
-
-  await runBuiltinHarness(client, options, onChunk);
+  await orchestrators[kind](client, options, onChunk);
 }
 
 function getExecutionOrder(): OrchestratorKind[] {
-  switch (config.LILAC_ORCHESTRATOR) {
-    case 'openai-agents':
-      return ['openai-agents', 'langgraph', 'builtin'];
-    case 'langgraph':
-      return ['langgraph', 'openai-agents', 'builtin'];
-    case 'builtin':
-      return ['builtin'];
-    case 'auto':
-    default:
-      return ['openai-agents', 'langgraph', 'builtin'];
-  }
+  return orchestratorOrders[config.LILAC_ORCHESTRATOR] ?? orchestratorOrders.auto;
 }
 
 export async function runHarnessOrchestrator(
@@ -60,4 +58,3 @@ export async function runHarnessOrchestrator(
 
   throw new Error(`All orchestrators failed. ${errors.join(' | ')}`);
 }
-

@@ -1,28 +1,14 @@
 import OpenAI from 'openai';
 import type { HarnessRunOptions } from './types';
-import { executeToolCalls, getModelTools, toInitialMessages } from './chatRuntime';
-
-const defaultMaxSteps = 4;
-
-const harnessInstruction = `
-You are running inside Lilac Harness mode.
-
-Rules:
-1. You can call tools when useful, but keep calls minimal.
-2. If a tool returns enough context, provide a direct answer.
-3. Be explicit when a result comes from tool output.
-4. Keep final answer concise and practical.
-5. File writes and shell commands are guarded by Lilac permission mode; if blocked, tell the user which /permissions mode is required.
-`.trim();
+import { executeToolCalls, getModelTools, resolveMaxSteps, toInitialMessages } from './chatRuntime';
 
 export async function runHarness(
   client: OpenAI,
   options: HarnessRunOptions,
   onChunk: (text: string) => void
 ) {
-  const maxSteps = options.maxSteps ?? defaultMaxSteps;
+  const maxSteps = resolveMaxSteps(options);
   const modelMessages = toInitialMessages(options);
-  modelMessages[0]!.content = [modelMessages[0]!.content, harnessInstruction].filter(Boolean).join('\n\n');
   const tools = getModelTools();
 
   for (let step = 0; step < maxSteps; step++) {

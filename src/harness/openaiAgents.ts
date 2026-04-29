@@ -1,13 +1,8 @@
 import OpenAI from 'openai';
 import { harnessTools } from './tools';
 import type { HarnessRunOptions } from './types';
-
-type DynamicImportFn = <T = unknown>(moduleName: string) => Promise<T>;
-
-const dynamicImport: DynamicImportFn = async <T = unknown>(moduleName: string) => {
-  const importer = new Function('m', 'return import(m)') as (m: string) => Promise<T>;
-  return importer(moduleName);
-};
+import { dynamicImport } from './dynamicImport';
+import { getSystemPrompt, resolveMaxSteps } from './chatRuntime';
 
 function getLatestUserMessage(options: HarnessRunOptions): string {
   const latest = [...options.messages].reverse().find(message => message.role === 'user');
@@ -59,14 +54,14 @@ export async function runWithOpenAIAgents(
 
   const agent = new AgentCtor({
     name: 'LilacHarnessAgent',
-    instructions: options.skill?.systemPrompt || 'You are a helpful assistant.',
+    instructions: getSystemPrompt(options),
     model: options.model,
     tools,
   });
 
   const userInput = getLatestUserMessage(options);
   const result = await runFn(agent, userInput, {
-    maxTurns: options.maxSteps ?? 4,
+    maxTurns: resolveMaxSteps(options),
     temperature: options.temperature,
   });
 
@@ -82,4 +77,3 @@ export async function runWithOpenAIAgents(
   const fallbackText = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
   onChunk(fallbackText || 'OpenAI Agents 未返回可解析文本。');
 }
-

@@ -8,7 +8,7 @@ import { Header } from './Header';
 import { MessageItem } from './MessageItem';
 import { loadDefaultSkill, loadSkills } from '../core/skills';
 import { createChatStream } from '../core/api';
-import { hasApiKey } from '../core/config';
+import { config, hasApiKey } from '../core/config';
 import { defaultSettings, loadSettings } from '../core/settings';
 import { loadLatestSession, saveSession } from '../core/session';
 import { executeSlashCommand, isSlashCommand } from '../commands';
@@ -134,7 +134,7 @@ export const App: React.FC = () => {
     setInput('');
 
     try {
-      await createChatStream(nextMessages, state.activeSkill, state.settings.defaultModel, (chunk) => {
+      await createChatStream(nextMessages, state.activeSkill, state.settings.defaultModel ?? config.LILAC_DEFAULT_MODEL, (chunk) => {
         const chunkTokens = estimateTokens(chunk);
         setState(s => {
           const last = s.messages[s.messages.length - 1];
@@ -186,7 +186,7 @@ export const App: React.FC = () => {
     <Box flexDirection="column" padding={1} minHeight={10}>
       <Header 
         skillName={state.activeSkill?.name} 
-        model={state.activeSkill?.model} 
+        model={state.settings.defaultModel ?? config.LILAC_DEFAULT_MODEL ?? state.activeSkill?.model} 
         status={hasApiKey ? state.status : 'Config Required'} 
         tokens={state.sessionTokens}
         permissionMode={state.settings.permissionMode}

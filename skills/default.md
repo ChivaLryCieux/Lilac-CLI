@@ -1,7 +1,7 @@
 ---
 name: Lilac-Core
 description: 默认的多才多艺助手
-model: gpt-4o
+model: ark-code-latest
 temperature: 0.7
 ---
 
